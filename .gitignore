@@ -29,3 +29,6 @@ __pycache__/
 *.pyo
 .venv/
 *.egg-info/
+
+# Training data — download locally with download_dataset.py (too large for git)
+data/
