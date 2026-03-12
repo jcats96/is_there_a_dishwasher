@@ -20,13 +20,12 @@ You need two processes: the Python backend and the Vite dev server.
 ### 1. Backend (Python / FastAPI)
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-playwright install chromium --with-deps   # only needed once
-uvicorn main:app --reload
+./backend/start.sh
 ```
+
+The script creates a virtual environment, installs dependencies, and installs
+the Playwright Chromium browser on first run — then starts the server. Just
+run the same command every time; it skips setup steps that are already done.
 
 The API runs on **http://localhost:8000**.  
 Health check: `curl http://localhost:8000/health`
