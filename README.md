@@ -70,3 +70,80 @@ CORS configuration is needed during development.
 
 Photo-based detection (Stage 2) is not yet implemented.
 
+---
+
+## Training the dishwasher detector
+
+The image classifier is a **MobileNetV3-Small** binary classifier fine-tuned on
+Google Open Images v7 and exported as an ONNX file that the backend loads at
+runtime. Training runs entirely on your local machine — no GPU required (though
+it is significantly faster with one).
+
+### Prerequisites
+
+- Python 3.10+
+- ~10 GB of free disk space (for the training images)
+- ~20 min on a GPU, or ~4 hours on CPU
+
+### Step 1 — Install training dependencies
+
+```bash
+pip install -r requirements_train.txt
+```
+
+### Step 2 — Download the dataset
+
+```bash
+python download_dataset.py
+```
+
+This downloads ~4 000 dishwasher images and ~4 000 kitchen images from Google
+Open Images v7, then splits them into `data/train/`, `data/val/`, and
+`data/test/` directories.  The `data/` folder is git-ignored — it lives only on
+your machine.
+
+### Step 3 — Train
+
+```bash
+python train.py
+```
+
+Common options:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--epochs` | 20 | Max training epochs |
+| `--batch-size` | 32 | Mini-batch size |
+| `--lr` | 1e-4 | AdamW learning rate |
+| `--patience` | 5 | Early-stopping patience |
+| `--device` | auto | `cuda` / `mps` / `cpu` |
+| `--data-dir` | `data` | Root of the dataset |
+| `--output` | `backend/models/dishwasher_classifier.onnx` | Output path |
+
+Training prints per-epoch loss and accuracy on both splits, restores the best
+checkpoint, evaluates on the held-out test set, and writes the ONNX file.
+
+### Step 4 — Commit the model weights
+
+The trained ONNX file (`backend/models/dishwasher_classifier.onnx`, ~9 MB) is
+committed to the repository so that the backend can load it without any
+external download at startup.
+
+This repository uses **[Git LFS](https://git-lfs.com/)** to store binary model
+files efficiently.  If you haven't set it up yet, run this once:
+
+```bash
+git lfs install
+```
+
+Then commit as normal:
+
+```bash
+git add backend/models/dishwasher_classifier.onnx
+git commit -m "Add trained dishwasher classifier"
+git push
+```
+
+> **Note:** If Git LFS is not available, the file can still be committed
+> directly — at ~9 MB it is well within GitHub's 100 MB per-file limit.
+

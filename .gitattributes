@@ -1,0 +1,8 @@
+# Track ONNX model weights with Git LFS so large binary files don't bloat
+# the regular git history.
+#
+# One-time setup (every contributor / CI machine):
+#   git lfs install
+#
+# After that, git add / commit / push work exactly as normal.
+backend/models/*.onnx filter=lfs diff=lfs merge=lfs -text
