@@ -1,46 +1,119 @@
+import { useState } from 'react'
 import './App.css'
 
 function App() {
+  const [url, setUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)   // { has_dishwasher, evidence } | null
+  const [error, setError] = useState(null)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!url.trim()) return
+
+    setLoading(true)
+    setResult(null)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.trim() }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail || `Server error ${res.status}`)
+      }
+
+      const data = await res.json()
+      setResult(data)
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="page">
       <header className="hero">
         <div className="hero-icon" aria-hidden="true">🍽️</div>
         <h1>Is There a Dishwasher?</h1>
         <p className="hero-tagline">
-          Stop squinting at listing photos. Let AI answer the one question
-          every apartment hunter really needs to know.
+          Stop squinting at listing photos. Paste a Zillow link and get an
+          instant yes-or-no answer.
         </p>
-        <a
-          className="cta-button"
-          href="https://github.com/jcats96/is_there_a_dishwasher"
-          target="_blank"
-          rel="noreferrer"
-        >
-          View on GitHub
-        </a>
+
+        <form className="search-form" onSubmit={handleSubmit}>
+          <label className="sr-only" htmlFor="listing-url">
+            Zillow listing URL
+          </label>
+          <input
+            id="listing-url"
+            className="url-input"
+            type="url"
+            placeholder="https://www.zillow.com/homedetails/…"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            required
+            disabled={loading}
+          />
+          <button className="cta-button" type="submit" disabled={loading}>
+            {loading ? 'Checking…' : 'Check'}
+          </button>
+        </form>
+
+        <p className="text-only-notice">
+          ⚠️ <strong>v0.1 — text search only.</strong> This version searches
+          the listing description and amenities list for the word
+          &ldquo;dishwasher&rdquo;. Photo analysis is coming in a future
+          release.
+        </p>
+
+        {loading && (
+          <div className="result-card loading" role="status">
+            <span className="spinner" aria-hidden="true" />
+            Fetching listing and scanning text…
+          </div>
+        )}
+
+        {error && (
+          <div className="result-card result-error" role="alert">
+            <span className="result-icon">⚠️</span>
+            <div>
+              <strong>Could not check this listing.</strong>
+              <p>{error}</p>
+            </div>
+          </div>
+        )}
+
+        {result && !loading && (
+          <div
+            className={`result-card ${result.has_dishwasher ? 'result-yes' : 'result-no'}`}
+            role="status"
+          >
+            <span className="result-icon" aria-hidden="true">
+              {result.has_dishwasher ? '✅' : '❌'}
+            </span>
+            <div>
+              <strong>
+                Dishwasher: {result.has_dishwasher ? 'Yes' : 'No'}
+              </strong>
+              {result.evidence ? (
+                <p className="evidence">Found in listing text: <em>{result.evidence}</em></p>
+              ) : (
+                <p className="evidence">
+                  The word &ldquo;dishwasher&rdquo; was not found in the
+                  listing text. Photo analysis (coming soon) may give a more
+                  definitive answer.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </header>
-
-      <section className="section" id="problem">
-        <h2>The Problem</h2>
-        <p>
-          Searching for an apartment is tedious. Listings on Zillow, Apartments.com,
-          and similar sites include dozens of photos, but none of them are labeled
-          "this unit has a dishwasher." You end up scrolling through bedroom shots,
-          bathroom tiles, and blurry closet photos just to answer one simple
-          question.
-        </p>
-      </section>
-
-      <section className="section" id="solution">
-        <h2>The Solution</h2>
-        <p>
-          <strong>Is There a Dishwasher?</strong> scrapes apartment listings and
-          checks for a dishwasher in the fastest way possible: first by scanning
-          the listing text, then — only if necessary — by running AI vision on
-          the photos. Enter a listing URL and get a confident yes-or-no answer
-          in seconds.
-        </p>
-      </section>
 
       <section className="section" id="how-it-works">
         <h2>How It Works</h2>
@@ -48,46 +121,35 @@ function App() {
           <li>
             <span className="step-number">1</span>
             <div>
-              <strong>Scrape</strong> — The backend fetches the full listing
-              page (text, amenities, and photos) from the provided URL.
+              <strong>Fetch</strong> — The backend retrieves the full Zillow
+              listing page, including the description and amenities list.
             </div>
           </li>
           <li>
             <span className="step-number">2</span>
             <div>
-              <strong>Check text first</strong> — The listing description and
-              amenities are scanned for the word <em>"dishwasher"</em>. If
-              found, the answer is immediately returned — no image analysis
-              needed.
+              <strong>Search text</strong> — The listing text is scanned for
+              the word <em>&ldquo;dishwasher&rdquo;</em> (case-insensitive).
+              This catches explicit mentions in the description or the
+              amenities checklist.
             </div>
           </li>
           <li>
             <span className="step-number">3</span>
             <div>
-              <strong>Analyze photos (fallback)</strong> — If the text check
-              comes up empty, each listing photo is passed through a vision
-              model to detect whether a dishwasher is visible.
+              <strong>Report</strong> — You get a clear yes or no, plus the
+              exact text snippet where &ldquo;dishwasher&rdquo; was found.
             </div>
           </li>
           <li>
             <span className="step-number">4</span>
             <div>
-              <strong>Report</strong> — The result is returned to the frontend
-              as a clear answer, along with the text snippet or evidence image
-              that confirmed it.
+              <strong>Photo analysis <span className="badge-soon">coming soon</span></strong>{' '}
+              — A local vision model will scan listing photos when the text
+              check draws a blank, at no extra cost.
             </div>
           </li>
         </ol>
-      </section>
-
-      <section className="section" id="tech">
-        <h2>Technology Stack</h2>
-        <ul className="tech-list">
-          <li><span className="badge">Frontend</span> React (Vite)</li>
-          <li><span className="badge">Scraper</span> Python + BeautifulSoup / Playwright</li>
-          <li><span className="badge">Vision</span> OpenAI Vision API (GPT-4o) or a fine-tuned image classifier</li>
-          <li><span className="badge">API</span> FastAPI (Python)</li>
-        </ul>
       </section>
 
       <footer className="footer">
