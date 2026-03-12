@@ -19,6 +19,20 @@ You need two processes: the Python backend and the Vite dev server.
 
 ### 1. Backend (Python / FastAPI)
 
+#### Option A — Docker (recommended on Windows)
+
+Make sure [Docker Desktop](https://www.docker.com/products/docker-desktop/) is
+running, then from the project root:
+
+```bash
+docker compose up --build
+```
+
+The first build takes a few minutes while Docker downloads the Playwright image
+and installs dependencies. Subsequent starts are fast.
+
+#### Option B — Shell script (macOS / Linux)
+
 ```bash
 ./backend/start.sh
 ```
