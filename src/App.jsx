@@ -4,7 +4,7 @@ import './App.css'
 function App() {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState(null)   // { has_dishwasher, evidence } | null
+  const [result, setResult] = useState(null)   // { has_dishwasher, method, evidence } | null
   const [error, setError] = useState(null)
 
   async function handleSubmit(e) {
@@ -36,6 +36,41 @@ function App() {
     }
   }
 
+  function renderEvidence(result) {
+    if (result.method === 'vision') {
+      if (result.has_dishwasher && result.evidence) {
+        return (
+          <>
+            <p className="evidence">Detected in listing photo:</p>
+            <img
+              src={result.evidence}
+              alt="Listing photo showing a dishwasher"
+              className="evidence-image"
+            />
+          </>
+        )
+      }
+      return (
+        <p className="evidence">
+          No dishwasher was found in the listing text or photos.
+        </p>
+      )
+    }
+
+    // method === 'text'
+    if (result.evidence) {
+      return (
+        <p className="evidence">Found in listing text: <em>{result.evidence}</em></p>
+      )
+    }
+    return (
+      <p className="evidence">
+        The word &ldquo;dishwasher&rdquo; was not found in the listing text or
+        photos.
+      </p>
+    )
+  }
+
   return (
     <div className="page">
       <header className="hero">
@@ -65,17 +100,10 @@ function App() {
           </button>
         </form>
 
-        <p className="text-only-notice">
-          ⚠️ <strong>v0.1 — text search only.</strong> This version searches
-          the listing description and amenities list for the word
-          &ldquo;dishwasher&rdquo;. Photo analysis is coming in a future
-          release.
-        </p>
-
         {loading && (
           <div className="result-card loading" role="status">
             <span className="spinner" aria-hidden="true" />
-            Fetching listing and scanning text…
+            Fetching listing and scanning text & photos…
           </div>
         )}
 
@@ -101,15 +129,10 @@ function App() {
               <strong>
                 Dishwasher: {result.has_dishwasher ? 'Yes' : 'No'}
               </strong>
-              {result.evidence ? (
-                <p className="evidence">Found in listing text: <em>{result.evidence}</em></p>
-              ) : (
-                <p className="evidence">
-                  The word &ldquo;dishwasher&rdquo; was not found in the
-                  listing text. Photo analysis (coming soon) may give a more
-                  definitive answer.
-                </p>
-              )}
+              {renderEvidence(result)}
+              <p className="method-badge">
+                Detected via: <em>{result.method === 'vision' ? 'photo analysis' : 'text search'}</em>
+              </p>
             </div>
           </div>
         )}
@@ -122,7 +145,8 @@ function App() {
             <span className="step-number">1</span>
             <div>
               <strong>Fetch</strong> — The backend retrieves the full Zillow
-              listing page, including the description and amenities list.
+              listing page, including the description, amenities list, and
+              photo gallery.
             </div>
           </li>
           <li>
@@ -137,16 +161,17 @@ function App() {
           <li>
             <span className="step-number">3</span>
             <div>
-              <strong>Report</strong> — You get a clear yes or no, plus the
-              exact text snippet where &ldquo;dishwasher&rdquo; was found.
+              <strong>Analyze photos</strong> — If the text check draws a
+              blank, each listing photo is sent to a vision AI that answers
+              one question: &ldquo;Does this image show a dishwasher?&rdquo;
             </div>
           </li>
           <li>
             <span className="step-number">4</span>
             <div>
-              <strong>Photo analysis <span className="badge-soon">coming soon</span></strong>{' '}
-              — A local vision model will scan listing photos when the text
-              check draws a blank, at no extra cost.
+              <strong>Report</strong> — You get a clear yes or no, the
+              matching photo or text snippet, and which method found the
+              answer.
             </div>
           </li>
         </ol>
