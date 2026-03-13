@@ -1,5 +1,5 @@
 """
-scraper.py — fetch Zillow listing text.
+scraper.py — fetch Zillow listing text and image URLs.
 
 Strategy:
 1. Try a plain HTTPS request and look for the __NEXT_DATA__ JSON blob that
@@ -8,19 +8,28 @@ Strategy:
 2. Fall back to Playwright (headless Chromium) if the plain request fails
    or returns a bot-challenge page.
 
-Returns a single string of all the human-readable text from the listing so
-that the checker module can search it for "dishwasher".
+Returns a ListingData object containing all extractable text and a list of
+listing photo URLs so that the checker and vision modules can analyse them.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+
+
+@dataclass
+class ListingData:
+    """Structured data extracted from a listing page."""
+
+    text: str
+    image_urls: list[str] = field(default_factory=list)
 
 # Zillow embeds structured listing data inside a <script id="__NEXT_DATA__">
 # tag.  Pulling text from this JSON is more reliable than scraping the rendered
@@ -28,6 +37,12 @@ from bs4 import BeautifulSoup
 _NEXT_DATA_RE = re.compile(
     r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
     re.DOTALL,
+)
+
+# Zillow hosts listing photos on their static CDN.
+_ZILLOW_PHOTO_RE = re.compile(
+    r"^https://photos\.zillowstatic\.com/",
+    re.IGNORECASE,
 )
 
 _REQUEST_HEADERS = {
@@ -92,8 +107,21 @@ def _flatten_json(obj: Any, parts: list[str]) -> None:
             _flatten_json(item, parts)
 
 
-def _extract_text_from_html(html: str) -> str:
-    """Pull all visible text out of raw HTML."""
+def _collect_image_urls(obj: Any, urls: list[str]) -> None:
+    """Recursively collect Zillow CDN photo URLs from a JSON value."""
+    if isinstance(obj, str):
+        if _ZILLOW_PHOTO_RE.match(obj):
+            urls.append(obj)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            _collect_image_urls(v, urls)
+    elif isinstance(obj, list):
+        for item in obj:
+            _collect_image_urls(item, urls)
+
+
+def _parse_listing_html(html: str) -> ListingData:
+    """Extract text and image URLs from raw listing HTML."""
     soup = BeautifulSoup(html, "html.parser")
 
     # Remove script / style noise
@@ -109,11 +137,28 @@ def _extract_text_from_html(html: str) -> str:
             _flatten_json(data, parts)
             # Also grab visible text in case the JSON omits something
             parts.append(soup.get_text(" "))
-            return " ".join(parts)
+            text = " ".join(parts)
+
+            raw_urls: list[str] = []
+            _collect_image_urls(data, raw_urls)
+            # Deduplicate while preserving discovery order
+            seen: set[str] = set()
+            image_urls: list[str] = []
+            for u in raw_urls:
+                if u not in seen:
+                    seen.add(u)
+                    image_urls.append(u)
+
+            return ListingData(text=text, image_urls=image_urls)
         except json.JSONDecodeError:
             pass
 
-    return soup.get_text(" ")
+    return ListingData(text=soup.get_text(" "), image_urls=[])
+
+
+def _extract_text_from_html(html: str) -> str:
+    """Pull all visible text out of raw HTML.  Kept for backward compatibility."""
+    return _parse_listing_html(html).text
 
 
 def _fetch_with_httpx(url: str) -> str | None:
@@ -150,9 +195,9 @@ def _fetch_with_playwright(url: str) -> str:
         return html
 
 
-def scrape_listing_text(url: str) -> str:
+def scrape_listing(url: str) -> ListingData:
     """
-    Fetch a Zillow listing page and return all extractable text.
+    Fetch a Zillow listing page and return extracted text and image URLs.
 
     Parameters
     ----------
@@ -177,4 +222,26 @@ def scrape_listing_text(url: str) -> str:
                 f"Could not fetch listing page: {exc}"
             ) from exc
 
-    return _extract_text_from_html(html)
+    return _parse_listing_html(html)
+
+
+def scrape_listing_text(url: str) -> str:
+    """
+    Fetch a Zillow listing page and return all extractable text.
+
+    Kept for backward compatibility.  Prefer :func:`scrape_listing` for
+    new callers that also need image URLs.
+
+    Parameters
+    ----------
+    url:
+        The listing URL.  Must be an HTTPS URL on zillow.com.
+
+    Raises
+    ------
+    ValueError
+        If *url* is not a valid, allowed Zillow URL.
+    RuntimeError
+        If the page could not be fetched at all.
+    """
+    return scrape_listing(url).text
