@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { scrapeListing, validateUrl } from './server/scrape.js'
+import { proxyVisionRequest } from './server/vision.js'
 
 /**
  * Vite dev-server plugin that exposes /api/scrape backed by a headless
@@ -13,11 +14,13 @@ function scrapeApiPlugin() {
 
     configureServer(server) {
       addScrapeMiddleware(server.middlewares)
+      addVisionMiddleware(server.middlewares)
     },
 
     // Also wire up the preview server so `npm run preview` works
     configurePreviewServer(server) {
       addScrapeMiddleware(server.middlewares)
+      addVisionMiddleware(server.middlewares)
     },
   }
 }
@@ -86,6 +89,66 @@ function addScrapeMiddleware(middlewares) {
         res.statusCode = 500
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify({ detail: err.message }))
+      }
+    })
+  })
+}
+
+function addVisionMiddleware(middlewares) {
+  middlewares.use('/api/vision', (req, res) => {
+    if (req.method !== 'POST') {
+      res.statusCode = 405
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ detail: 'Method not allowed' }))
+      return
+    }
+
+    const MAX_BODY = 8_192 // imageUrl + hfToken; image data is a URL, not inline bytes
+    let body = ''
+    let bodySize = 0
+
+    req.on('data', chunk => {
+      bodySize += chunk.length
+      if (bodySize > MAX_BODY) {
+        res.statusCode = 413
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ detail: 'Request body too large.' }))
+        req.destroy()
+        return
+      }
+      body += chunk
+    })
+    req.on('end', async () => {
+      if (res.writableEnded) return
+
+      let parsed
+      try {
+        parsed = JSON.parse(body)
+      } catch {
+        res.statusCode = 400
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ detail: 'Invalid JSON in request body.' }))
+        return
+      }
+
+      const { imageUrl, hfToken } = parsed
+      if (!imageUrl || !hfToken) {
+        res.statusCode = 400
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ detail: 'imageUrl and hfToken are required.' }))
+        return
+      }
+
+      try {
+        const result = await proxyVisionRequest(imageUrl, hfToken)
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify(result))
+      } catch (err) {
+        console.error('[api/vision][dev] Request failed', { message: err.message })
+        res.statusCode = err.status ?? 500
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ detail: err.message, isAuthError: err.isAuthError ?? false }))
       }
     })
   })

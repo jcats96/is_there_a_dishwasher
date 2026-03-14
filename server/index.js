@@ -14,6 +14,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { rateLimit } from 'express-rate-limit'
 import { scrapeListing, validateUrl } from './scrape.js'
+import { proxyVisionRequest } from './vision.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -33,6 +34,21 @@ app.use(limiter)
 app.use(express.static(join(__dirname, '..', 'dist')))
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))
+
+app.post('/api/vision', async (req, res) => {
+  const { imageUrl, hfToken } = req.body ?? {}
+  if (!imageUrl || !hfToken) {
+    return res.status(400).json({ detail: 'imageUrl and hfToken are required.' })
+  }
+  try {
+    const result = await proxyVisionRequest(imageUrl, hfToken)
+    res.json(result)
+  } catch (err) {
+    console.error('[api/vision] Request failed', { message: err.message })
+    const status = err.status ?? 500
+    res.status(status).json({ detail: err.message, isAuthError: err.isAuthError ?? false })
+  }
+})
 
 app.post('/api/scrape', async (req, res) => {
   const { url } = req.body ?? {}
