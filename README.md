@@ -51,8 +51,9 @@ environment variable to use a different port.
 ## Hugging Face API token (required for photo analysis)
 
 Stage 2 vision detection calls the
-[Hugging Face Inference API](https://huggingface.co/inference-api) directly
-from your browser. You need a free Hugging Face account and an API token.
+[Hugging Face Inference API](https://huggingface.co/inference-api) (via
+[router.huggingface.co](https://router.huggingface.co)) server-side.
+You need a free Hugging Face account and an API token.
 
 **Option A — enter it in the app UI**
 
@@ -86,8 +87,20 @@ Get a free token at **https://huggingface.co/settings/tokens**.
 3. **Analyse photos** — If the text check draws a blank, up to 10 listing
    photos are sent one-by-one to
    [openbmb/MiniCPM-V-2](https://huggingface.co/openbmb/MiniCPM-V-2) via the
-   Hugging Face Inference API with the question: *"Does this photo show a
-   dishwasher?"*
+   Hugging Face Inference API (`router.huggingface.co`) with the question:
+   *"Does this photo show a dishwasher?"*
 4. **Report** — You get a clear **Yes** or **No**, the matching text snippet
    or photo, and which method found the answer.
+
+---
+
+## Running tests
+
+```bash
+npm test   # run the Vitest unit-test suite
+```
+
+Unit tests live in `tests/` and cover the server-side Hugging Face vision
+proxy (`server/vision.js`).  No real API calls are made — `fetch` is stubbed
+so the suite runs offline.
 

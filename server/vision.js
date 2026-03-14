@@ -9,7 +9,7 @@
  */
 
 const MODEL = 'openbmb/MiniCPM-V-2'
-const HF_ENDPOINT = `https://api-inference.huggingface.co/models/${MODEL}/v1/chat/completions`
+const HF_ENDPOINT = `https://router.huggingface.co/models/${MODEL}/v1/chat/completions`
 const PROMPT = 'Does this photo show a dishwasher? Answer with exactly one word: yes or no.'
 
 /**
