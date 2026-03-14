@@ -7,7 +7,7 @@ spreadsheet as you browse — no copy-pasting, no separate tool.
 The extension reads data the browser has already fetched (from Zillow's
 `__NEXT_DATA__` JSON blob), so no automated HTTP requests to Zillow are ever
 made. Stage 1 (text check) runs instantly and for free. Stage 2 (photo
-analysis) is optional and requires an OpenAI API key.
+analysis) is optional and requires a Hugging Face API token.
 
 ## Docs
 
@@ -27,9 +27,9 @@ analysis) is optional and requires an OpenAI API key.
 2. **Text check** — The listing description and amenities list are searched for
    the word *"dishwasher"* (case-insensitive). This takes < 5 ms and requires
    no API key.
-3. **Photo check** *(optional, requires OpenAI key)* — If the text check draws
-   a blank and you have saved an OpenAI API key, the background service worker
-   sends listing photos to `gpt-4o-mini` one-by-one.
+3. **Photo check** *(optional, requires Hugging Face token)* — If the text check draws
+   a blank and you have saved a Hugging Face API token, the background service worker
+   sends listing photos to [`openbmb/MiniCPM-V-2`](https://huggingface.co/openbmb/MiniCPM-V-2) one-by-one via `router.huggingface.co`.
 4. **Badge** — A small overlay badge on the listing page shows the result
    immediately: ✅ Yes / ❌ No / ⏳ Checking…
 5. **Spreadsheet** — Every listing you visit is appended to a persistent table
@@ -95,18 +95,19 @@ Photo analysis is off by default. To enable it:
 
 1. Click the extension icon to open the popup.
 2. Expand **⚙ Settings**.
-3. Paste your OpenAI API key (`sk-…`) into the **OpenAI API key** field.
+3. Paste your Hugging Face API token (`hf_…`) into the **Hugging Face API token** field.
 4. Click **Save settings**.
 
-Get a key at **https://platform.openai.com/api-keys**.
+Get a free token at **https://huggingface.co/settings/tokens**.
 
-The key is stored only in `chrome.storage.local`, which is scoped to the
+The token is stored only in `chrome.storage.local`, which is scoped to the
 extension and is never synced to the cloud.
 
-> **Cost note:** Each photo check calls `gpt-4o-mini` with `detail: low`
-> (approximately $0.001–$0.002 per image at current OpenAI pricing — verify at
-> [openai.com/pricing](https://openai.com/pricing)). You can cap the number of
-> photos checked per listing in Settings (default: 10).
+> **Cost note:** Each photo check calls
+> [`openbmb/MiniCPM-V-2`](https://huggingface.co/openbmb/MiniCPM-V-2) via the
+> [Hugging Face Inference API](https://huggingface.co/inference-api). Free-tier
+> accounts include a generous rate limit; usage beyond that is billed per token.
+> You can cap the number of photos checked per listing in Settings (default: 10).
 
 ---
 
@@ -119,7 +120,7 @@ Click the extension icon on any page to open the popup:
 | **Filter dropdown** | Show all listings, only those with a dishwasher, or only those without |
 | **⬇ Export CSV** | Download the visible rows as a `.csv` file for Excel / Google Sheets |
 | **🗑 Clear all** | Delete all saved listing rows (irreversible) |
-| **⚙ Settings** | Enter OpenAI API key; set max images per listing |
+| **⚙ Settings** | Enter Hugging Face API token; set max images per listing |
 
 The popup table updates in real-time as you visit new listings.
 
@@ -132,7 +133,7 @@ extension/
 ├── manifest.json   # Manifest v3 — declares permissions, content scripts, popup
 ├── content.js      # Runs on every zillow.com/homedetails/* page; parses data
 │                   # and shows the badge overlay
-├── background.js   # Service worker — persists rows, calls OpenAI Vision API
+├── background.js   # Service worker — persists rows, calls Hugging Face Vision API
 ├── popup.html      # Popup UI shell
 ├── popup.js        # Popup logic — table, filter, CSV export, settings
 ├── popup.css       # Popup styles
@@ -149,4 +150,4 @@ docs/               # Architecture, SRS, and research notes
 | `storage` | Save and load the listing spreadsheet and settings |
 | `unlimitedStorage` | Allow the spreadsheet to grow beyond the 5 MB default quota |
 | Host: `https://*.zillow.com/*` | Inject the content script into Zillow listing pages |
-| Host: `https://api.openai.com/*` | Allow the background service worker to call the OpenAI Vision API |
+| Host: `https://router.huggingface.co/*` | Allow the background service worker to call the Hugging Face Inference API |

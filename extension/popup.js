@@ -39,9 +39,9 @@ async function loadRows() {
 }
 
 async function loadSettings() {
-  const data = await chrome.storage.local.get(['openai_key', 'max_images']);
+  const data = await chrome.storage.local.get(['hf_token', 'max_images']);
   return {
-    openaiKey: data.openai_key ?? '',
+    hfToken: data.hf_token ?? '',
     maxImages: data.max_images ?? 10,
   };
 }
@@ -206,11 +206,11 @@ btnClear.addEventListener('click', async () => {
 });
 
 btnSaveSettings.addEventListener('click', async () => {
-  const key = apiKeyInput.value.trim();
+  const token = apiKeyInput.value.trim();
   const maxImages = parseInt(maxImagesInput.value, 10);
 
   await chrome.storage.local.set({
-    openai_key: key || null,
+    hf_token: token || null,
     max_images: Number.isFinite(maxImages) && maxImages > 0 ? maxImages : 10,
   });
 
@@ -233,7 +233,7 @@ chrome.storage.onChanged.addListener((changes) => {
 (async () => {
   const [rows, settings] = await Promise.all([loadRows(), loadSettings()]);
   allRows = rows;
-  apiKeyInput.value = settings.openaiKey;
+  apiKeyInput.value = settings.hfToken;
   maxImagesInput.value = settings.maxImages;
 
   renderTable();

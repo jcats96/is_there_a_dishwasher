@@ -6,7 +6,7 @@
  * 2. Runs an instant text check for "dishwasher".
  * 3. Shows a badge overlay with the result (or "Checking…" while vision runs).
  * 4. Sends the listing data to the background service worker, which persists
- *    the row and optionally runs a vision check via the OpenAI API.
+ *    the row and optionally runs a vision check via the Hugging Face Inference API.
  * 5. Updates the badge once the background replies with a final result.
  */
 

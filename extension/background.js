@@ -3,12 +3,12 @@
  *
  * Handles messages from content.js:
  *  - PROCESS_LISTING: persists the row to chrome.storage.local and optionally
- *    calls the OpenAI Vision API (Stage 2) if a key is stored and the text
- *    check drew a blank.
+ *    calls the Hugging Face Inference API (Stage 2) if a token is stored and the
+ *    text check drew a blank.
  *
  * Storage schema (chrome.storage.local):
  *  - "rows": Array of ListingRow objects, deduplicated by zpid
- *  - "openai_key": string | undefined
+ *  - "hf_token": string | undefined
  *  - "max_images": number (default 10)
  *
  * ListingRow:
@@ -17,10 +17,9 @@
  */
 
 const DEFAULT_MAX_IMAGES = 10;
-// gpt-4o-mini is used because it supports vision input, has low per-image cost
-// (~$0.001–$0.002 with detail:low), and has broad availability on the OpenAI API.
-const VISION_MODEL = 'gpt-4o-mini';
-const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+const MODEL = 'openbmb/MiniCPM-V-2';
+const HF_ENDPOINT = `https://router.huggingface.co/models/${MODEL}/v1/chat/completions`;
+const PROMPT = 'Does this photo show a dishwasher? Answer with exactly one word: yes or no.';
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -42,9 +41,9 @@ async function upsertRow(row) {
   await chrome.storage.local.set({ rows });
 }
 
-async function getOpenAIKey() {
-  const data = await chrome.storage.local.get('openai_key');
-  return data.openai_key ?? null;
+async function getHfToken() {
+  const data = await chrome.storage.local.get('hf_token');
+  return data.hf_token ?? null;
 }
 
 async function getMaxImages() {
@@ -53,29 +52,29 @@ async function getMaxImages() {
 }
 
 // ---------------------------------------------------------------------------
-// Stage 2: Vision check via OpenAI API
+// Stage 2: Vision check via Hugging Face Inference API
 // ---------------------------------------------------------------------------
 
-async function checkImageForDishwasher(imageUrl, apiKey) {
-  const res = await fetch(OPENAI_ENDPOINT, {
+async function checkImageForDishwasher(imageUrl, hfToken) {
+  const res = await fetch(HF_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${hfToken}`,
     },
     body: JSON.stringify({
-      model: VISION_MODEL,
+      model: MODEL,
       messages: [
         {
           role: 'user',
           content: [
             {
               type: 'image_url',
-              image_url: { url: imageUrl, detail: 'low' },
+              image_url: { url: imageUrl },
             },
             {
               type: 'text',
-              text: 'Does this image show a dishwasher? Reply with only "yes" or "no".',
+              text: PROMPT,
             },
           ],
         },
@@ -86,13 +85,13 @@ async function checkImageForDishwasher(imageUrl, apiKey) {
   });
 
   if (res.status === 401 || res.status === 403) {
-    const err = new Error('Invalid OpenAI API key.');
+    const err = new Error('Invalid Hugging Face API token.');
     err.isAuthError = true;
     throw err;
   }
 
   if (!res.ok) {
-    throw new Error(`OpenAI API error (HTTP ${res.status}).`);
+    throw new Error(`Hugging Face API error (HTTP ${res.status}).`);
   }
 
   const data = await res.json();
@@ -100,18 +99,18 @@ async function checkImageForDishwasher(imageUrl, apiKey) {
   return /\byes\b/i.test(answer);
 }
 
-async function runVisionCheck(listing, apiKey) {
+async function runVisionCheck(listing, hfToken) {
   const maxImages = await getMaxImages();
   const toCheck = listing.imageUrls.slice(0, maxImages);
 
   for (const imageUrl of toCheck) {
     try {
-      const found = await checkImageForDishwasher(imageUrl, apiKey);
+      const found = await checkImageForDishwasher(imageUrl, hfToken);
       if (found) {
         return { has_dishwasher: true, method: 'vision', evidence: imageUrl };
       }
     } catch (err) {
-      if (err.isAuthError) throw err;   // propagate bad-key errors
+      if (err.isAuthError) throw err;   // propagate bad-token errors
       // Network / model errors: skip this image and continue
     }
   }
@@ -133,10 +132,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     // Stage 2: only run vision if text check drew a blank
     if (!textResult.has_dishwasher && listing.imageUrls.length > 0) {
-      const apiKey = await getOpenAIKey();
-      if (apiKey) {
+      const hfToken = await getHfToken();
+      if (hfToken) {
         try {
-          finalResult = await runVisionCheck(listing, apiKey);
+          finalResult = await runVisionCheck(listing, hfToken);
         } catch {
           // Vision unavailable — keep the text result
           finalResult = textResult;
