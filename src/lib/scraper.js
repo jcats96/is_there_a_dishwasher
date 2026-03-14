@@ -1,16 +1,16 @@
 /**
- * Fetches a Zillow listing page via the local Playwright backend (headless
- * browser) and returns all extracted text content and listing photo URLs.
+ * Fetches a listing page via the local Playwright backend (headless browser)
+ * and returns extracted text content and photo URLs.
  */
 
 /**
- * @param {string} url  A zillow.com listing URL
+ * @param {string} url  An HTTP(S) listing URL
  * @returns {Promise<{ text: string, imageUrls: string[] }>}
  */
 export async function scrapeListing(url) {
   const parsed = new URL(url)
-  if (!['zillow.com', 'www.zillow.com'].includes(parsed.hostname)) {
-    throw new Error('Only Zillow listing URLs are supported (zillow.com).')
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only HTTP and HTTPS URLs are supported.')
   }
 
   let res

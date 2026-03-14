@@ -19,10 +19,8 @@ import { chromium } from 'playwright'
 /** Minimum characters of body text before we consider the page valid. */
 const MIN_CONTENT_LENGTH = 500
 
-const ALLOWED_HOSTS = new Set(['zillow.com', 'www.zillow.com'])
-
 /**
- * Validate that `url` points to a Zillow listing and return a cleaned copy.
+ * Validate that `url` points to an HTTP(S) page and return a cleaned copy.
  * Throws an Error with a user-friendly message on failure.
  *
  * @param {string} url
@@ -35,18 +33,18 @@ export function validateUrl(url) {
   } catch {
     throw new Error('Invalid URL.')
   }
-  if (!ALLOWED_HOSTS.has(parsed.hostname)) {
-    throw new Error('Only Zillow listing URLs are supported (zillow.com).')
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only HTTP and HTTPS URLs are supported.')
   }
   // Reconstruct from parsed parts to strip unexpected components (e.g. fragment)
   return `${parsed.origin}${parsed.pathname}${parsed.search}`
 }
 
 /**
- * Use a headless Playwright browser to render the Zillow listing page and
- * extract text content and listing photo URLs.
+ * Use a headless Playwright browser to render a listing page and
+ * extract text content and photo URLs.
  *
- * @param {string} url  A validated zillow.com listing URL
+ * @param {string} url  A validated HTTP(S) listing URL
  * @returns {Promise<{ text: string, imageUrls: string[] }>}
  */
 export async function scrapeListing(url) {
@@ -150,8 +148,17 @@ export async function scrapeListing(url) {
       }
     }
 
-    // Fallback: return all visible text from the rendered page body
-    return { text: bodyText || '', imageUrls: [] }
+    // Fallback: return visible text and any images found in the rendered DOM
+    const domImages = await page.evaluate(() => {
+      // eslint-disable-next-line no-undef
+      return Array.from(document.images)
+        .map(img => img.currentSrc || img.src)
+        .filter(src => typeof src === 'string' && /^https?:/i.test(src))
+    })
+    return {
+      text: bodyText || '',
+      imageUrls: [...new Set(domImages)],
+    }
   } finally {
     await browser.close()
   }

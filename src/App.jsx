@@ -122,19 +122,19 @@ function App() {
         <div className="hero-icon" aria-hidden="true">🍽️</div>
         <h1>Is There a Dishwasher?</h1>
         <p className="hero-tagline">
-          Stop squinting at listing photos. Paste a Zillow link and get an
+          Stop squinting at listing photos. Paste a listing link and get an
           instant yes-or-no answer.
         </p>
 
         <form className="search-form" onSubmit={handleSubmit}>
           <label className="sr-only" htmlFor="listing-url">
-            Zillow listing URL
+            Listing URL
           </label>
           <input
             id="listing-url"
             className="url-input"
             type="url"
-            placeholder="https://www.zillow.com/homedetails/…"
+            placeholder="https://www.zillow.com/homedetails/… or https://craigslist.org/…"
             value={url}
             onChange={e => setUrl(e.target.value)}
             required
