@@ -76,6 +76,13 @@ function addScrapeMiddleware(middlewares) {
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify(result))
       } catch (err) {
+        // Log structured error info (including diagnostics if present)
+        console.error('[api/scrape][dev] Request failed', {
+          url,
+          message: err.message,
+          ...(err.code ? { code: err.code } : {}),
+          ...(err.diagnostics ? { diagnostics: err.diagnostics } : {}),
+        })
         res.statusCode = 500
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify({ detail: err.message }))
