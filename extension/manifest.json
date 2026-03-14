@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Is There a Dishwasher?",
+  "version": "0.1.0",
+  "description": "Tracks dishwasher status across every Zillow listing you visit, building a comparison spreadsheet as you browse.",
+  "permissions": ["storage", "unlimitedStorage"],
+  "host_permissions": [
+    "https://*.zillow.com/*",
+    "https://api.openai.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.zillow.com/homedetails/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Is There a Dishwasher?"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
