@@ -144,6 +144,12 @@
   border: 1px solid rgba(234, 179, 8, 0.4);
 }
 
+.result-warning {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: var(--text);
+}
+
 .result-icon {
   font-size: 24px;
   flex-shrink: 0;
