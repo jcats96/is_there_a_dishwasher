@@ -1,38 +1,83 @@
 import { useState } from 'react'
 import './App.css'
+import { scrapeListing } from './lib/scraper'
+import { checkText } from './lib/checker'
+import { checkImageForDishwasher, MODEL } from './lib/vision'
+
+const MAX_IMAGES = 10
 
 function App() {
   const [url, setUrl] = useState('')
+  const [hfToken, setHfToken] = useState(
+    // localStorage takes precedence so a token entered in the UI is always used;
+    // VITE_HF_TOKEN (baked in at build time) acts as a fallback default.
+    () => localStorage.getItem('hf_token') || import.meta.env.VITE_HF_TOKEN || '',
+  )
+  const [showTokenInput, setShowTokenInput] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingMsg, setLoadingMsg] = useState('')
   const [result, setResult] = useState(null)   // { has_dishwasher, method, evidence } | null
   const [error, setError] = useState(null)
+
+  function handleTokenChange(e) {
+    const val = e.target.value
+    setHfToken(val)
+    if (val) {
+      localStorage.setItem('hf_token', val)
+    } else {
+      localStorage.removeItem('hf_token')
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
     if (!url.trim()) return
+
+    if (!hfToken.trim()) {
+      setError('Please enter your Hugging Face API token in the settings below.')
+      setShowTokenInput(true)
+      return
+    }
 
     setLoading(true)
     setResult(null)
     setError(null)
 
     try {
-      const res = await fetch('/api/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
-      })
+      // Step 1: fetch the Zillow page via CORS proxy
+      setLoadingMsg('Fetching listing…')
+      const { text, imageUrls } = await scrapeListing(url.trim())
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `Server error ${res.status}`)
+      // Step 2: fast text check
+      setLoadingMsg('Scanning listing text…')
+      const textResult = checkText(text)
+      if (textResult.has_dishwasher) {
+        setResult(textResult)
+        return
       }
 
-      const data = await res.json()
-      setResult(data)
+      // Step 3: vision check on listing photos
+      if (imageUrls.length === 0) {
+        setResult({ has_dishwasher: false, method: 'text', evidence: null })
+        return
+      }
+
+      const toCheck = imageUrls.slice(0, MAX_IMAGES)
+      for (let i = 0; i < toCheck.length; i++) {
+        setLoadingMsg(`Analyzing photo ${i + 1} of ${toCheck.length} with ${MODEL}…`)
+        const found = await checkImageForDishwasher(toCheck[i], hfToken.trim())
+        if (found) {
+          setResult({ has_dishwasher: true, method: 'vision', evidence: toCheck[i] })
+          return
+        }
+      }
+
+      setResult({ has_dishwasher: false, method: 'vision', evidence: null })
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
+      setLoadingMsg('')
     }
   }
 
@@ -100,10 +145,50 @@ function App() {
           </button>
         </form>
 
+        <div className="token-section">
+          <button
+            type="button"
+            className="token-toggle"
+            onClick={() => setShowTokenInput(v => !v)}
+            aria-expanded={showTokenInput}
+          >
+            {showTokenInput ? '▲' : '▼'} Hugging Face API token
+            {hfToken ? ' ✓' : ' (required)'}
+          </button>
+          {showTokenInput && (
+            <div className="token-input-wrap">
+              <label className="sr-only" htmlFor="hf-token">
+                Hugging Face API token
+              </label>
+              <input
+                id="hf-token"
+                className="token-input"
+                type="password"
+                placeholder="hf_…"
+                value={hfToken}
+                onChange={handleTokenChange}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="token-hint">
+                Get a free token at{' '}
+                <a
+                  href="https://huggingface.co/settings/tokens"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  huggingface.co/settings/tokens
+                </a>
+                . Saved in your browser only.
+              </p>
+            </div>
+          )}
+        </div>
+
         {loading && (
           <div className="result-card loading" role="status">
             <span className="spinner" aria-hidden="true" />
-            Fetching listing and scanning text & photos…
+            {loadingMsg || 'Working…'}
           </div>
         )}
 
@@ -131,7 +216,12 @@ function App() {
               </strong>
               {renderEvidence(result)}
               <p className="method-badge">
-                Detected via: <em>{result.method === 'vision' ? 'photo analysis' : 'text search'}</em>
+                Detected via:{' '}
+                <em>
+                  {result.method === 'vision'
+                    ? `photo analysis (${MODEL})`
+                    : 'text search'}
+                </em>
               </p>
             </div>
           </div>
@@ -144,9 +234,9 @@ function App() {
           <li>
             <span className="step-number">1</span>
             <div>
-              <strong>Fetch</strong> — The backend retrieves the full Zillow
-              listing page, including the description, amenities list, and
-              photo gallery.
+              <strong>Fetch</strong> — The listing page is retrieved via a
+              CORS proxy and all text, amenity mentions, and photo URLs are
+              extracted directly in your browser.
             </div>
           </li>
           <li>
@@ -162,8 +252,16 @@ function App() {
             <span className="step-number">3</span>
             <div>
               <strong>Analyze photos</strong> — If the text check draws a
-              blank, each listing photo is sent to a vision AI that answers
-              one question: &ldquo;Does this image show a dishwasher?&rdquo;
+              blank, each listing photo is sent to{' '}
+              <a
+                href="https://huggingface.co/openbmb/MiniCPM-V-2"
+                target="_blank"
+                rel="noreferrer"
+              >
+                MiniCPM-V-2
+              </a>{' '}
+              via the Hugging Face Inference API with the question: &ldquo;Does
+              this image show a dishwasher?&rdquo;
             </div>
           </li>
           <li>

@@ -30,5 +30,10 @@ __pycache__/
 .venv/
 *.egg-info/
 
+# Env files
+.env
+.env.*
+!.env.example
+
 # Training data — download locally with download_dataset.py (too large for git)
 data/
