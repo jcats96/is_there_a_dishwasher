@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Is There a Dishwasher?</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <span class="header-icon" aria-hidden="true">🍽️</span>
+      <h1 class="header-title">Is There a Dishwasher?</h1>
+    </header>
+
+    <main>
+      <!-- Filter bar -->
+      <div class="toolbar">
+        <div class="filter-group">
+          <label for="filter-select" class="sr-only">Filter listings</label>
+          <select id="filter-select" class="filter-select">
+            <option value="all">All listings</option>
+            <option value="yes">✅ Has dishwasher</option>
+            <option value="no">❌ No dishwasher</option>
+          </select>
+        </div>
+
+        <div class="toolbar-actions">
+          <button id="btn-export" class="btn btn-secondary" title="Download spreadsheet as CSV">
+            ⬇ Export CSV
+          </button>
+          <button id="btn-clear" class="btn btn-danger" title="Delete all saved listings">
+            🗑 Clear all
+          </button>
+        </div>
+      </div>
+
+      <!-- Listings table -->
+      <div id="table-wrap" class="table-wrap">
+        <p id="empty-msg" class="empty-msg" hidden>
+          No listings saved yet.<br />
+          Browse Zillow listing pages and they'll appear here automatically.
+        </p>
+
+        <table id="listings-table" class="listings-table" hidden>
+          <thead>
+            <tr>
+              <th>Address</th>
+              <th>Price</th>
+              <th>Beds / Baths</th>
+              <th>Dishwasher</th>
+              <th>Evidence</th>
+            </tr>
+          </thead>
+          <tbody id="listings-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Settings -->
+      <details class="settings">
+        <summary class="settings-summary">⚙ Settings</summary>
+
+        <div class="settings-body">
+          <label class="settings-label" for="api-key-input">
+            Hugging Face API token
+            <span class="settings-hint">
+              Required for photo analysis (Stage 2). Leave blank for text-only mode.
+              Get a free token at <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">huggingface.co/settings/tokens</a>.
+            </span>
+          </label>
+          <input
+            id="api-key-input"
+            type="password"
+            class="settings-input"
+            placeholder="hf_…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+
+          <label class="settings-label" for="max-images-input">
+            Max images per listing
+            <span class="settings-hint">Stop checking photos after this many. Default: 10.</span>
+          </label>
+          <input
+            id="max-images-input"
+            type="number"
+            class="settings-input settings-input-small"
+            min="1"
+            max="50"
+            value="10"
+          />
+
+          <button id="btn-save-settings" class="btn btn-primary">Save settings</button>
+          <span id="settings-saved-msg" class="settings-saved-msg" hidden>Saved ✓</span>
+        </div>
+      </details>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
