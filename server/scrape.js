@@ -1,14 +1,23 @@
 /**
  * Playwright-based Zillow listing scraper (Node.js).
  *
- * Launches a headless Chromium browser, navigates to the listing URL,
- * waits for JavaScript to finish rendering, then extracts text and image URLs.
+ * Launches a headless Chromium browser with stealth patches applied to
+ * reduce bot-detection, navigates to the listing URL, waits for JavaScript
+ * to finish rendering, then extracts text and image URLs.
+ *
+ * Stealth measures applied:
+ *  - --disable-blink-features=AutomationControlled  (hides navigator.webdriver)
+ *  - addInitScript patches for navigator.webdriver, plugins, languages, chrome
+ *  - Realistic locale, timezone, and Accept-Language headers
  *
  * Used by both the Vite dev-server plugin (vite.config.js) and the
  * production Express server (server/index.js).
  */
 
 import { chromium } from 'playwright'
+
+/** Minimum characters of body text before we consider the page valid. */
+const MIN_CONTENT_LENGTH = 500
 
 const ALLOWED_HOSTS = new Set(['zillow.com', 'www.zillow.com'])
 
@@ -43,7 +52,16 @@ export function validateUrl(url) {
 export async function scrapeListing(url) {
   const cleanUrl = validateUrl(url)
 
-  const browser = await chromium.launch({ headless: true })
+  // Launch with stealth flags to suppress Chromium's automation indicators.
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-infobars',
+    ],
+  })
   try {
     const context = await browser.newContext({
       userAgent:
@@ -51,11 +69,71 @@ export async function scrapeListing(url) {
         'AppleWebKit/537.36 (KHTML, like Gecko) ' +
         'Chrome/124.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 800 },
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
+      extraHTTPHeaders: {
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
     })
+
+    // Patch JS properties that bot-detection scripts commonly probe.
+    await context.addInitScript(() => {
+      // Remove the webdriver flag — its presence is the most obvious automation tell.
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+
+      // Real browsers always have at least a few plugins; headless has none.
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => Object.assign([], { length: 3 }),
+      })
+
+      // Ensure the languages array is populated as it would be in a real browser.
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      })
+
+      // Headless Chromium omits window.chrome; add a minimal stub.
+      if (!window.chrome) { // eslint-disable-line no-undef
+        window.chrome = { runtime: {} } // eslint-disable-line no-undef
+      }
+    })
+
     const page = await context.newPage()
 
     // Navigate and wait for the network to go idle (JS rendering complete)
-    await page.goto(cleanUrl, { waitUntil: 'networkidle', timeout: 60_000 })
+    const response = await page.goto(cleanUrl, { waitUntil: 'networkidle', timeout: 60_000 })
+    const navigationStatus = response?.status() ?? 0
+    const navigationContentType = response?.headers()['content-type'] ?? null
+
+    // Collect diagnostics before any further processing so they are available
+    // for the sparse-content error if needed.
+    const [title, bodyText] = await Promise.all([
+      page.title(),
+      page.evaluate(() => document.body.innerText), // eslint-disable-line no-undef
+    ])
+
+    // Detect bot-challenge / access-denied pages before we try to parse them.
+    if (bodyText.length < MIN_CONTENT_LENGTH) {
+      const preview = bodyText.slice(0, 200)
+      const imageCount = await page.evaluate(() => document.querySelectorAll('img').length) // eslint-disable-line no-undef
+      const err = new Error(
+        'Listing page returned too little content — the site may have blocked the request or hidden the listing details.',
+      )
+      err.code = 'sparse-content'
+      err.diagnostics = {
+        navigationStatus,
+        navigationContentType,
+        loadedUrl: page.url(),
+        title,
+        textLength: bodyText.length,
+        imageCount,
+        preview,
+        hasCaptcha: /captcha/i.test(bodyText),
+        hasVerifyPrompt: /verify|press\s+&?\s*hold/i.test(bodyText),
+        hasAccessDenied: /access\s+(to\s+this\s+page\s+has\s+been\s+)?denied/i.test(bodyText),
+        hasRobotCheck: /robot|bot\s+check/i.test(bodyText),
+      }
+      throw err
+    }
 
     // Prefer Zillow's embedded Next.js data blob — it contains structured
     // listing data (text, images) without relying on hashed CSS class names.
@@ -73,7 +151,6 @@ export async function scrapeListing(url) {
     }
 
     // Fallback: return all visible text from the rendered page body
-    const bodyText = await page.evaluate(() => document.body.innerText) // eslint-disable-line no-undef
     return { text: bodyText || '', imageUrls: [] }
   } finally {
     await browser.close()

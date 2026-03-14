@@ -47,6 +47,13 @@ app.post('/api/scrape', async (req, res) => {
     const result = await scrapeListing(url)
     res.json(result)
   } catch (err) {
+    // Log structured error info (including diagnostics if present)
+    console.error('[api/scrape][prod] Request failed', {
+      url,
+      message: err.message,
+      ...(err.code ? { code: err.code } : {}),
+      ...(err.diagnostics ? { diagnostics: err.diagnostics } : {}),
+    })
     res.status(500).json({ detail: err.message })
   }
 })
