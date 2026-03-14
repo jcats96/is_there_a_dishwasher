@@ -43,7 +43,9 @@ export async function checkImageForDishwasher(imageUrl, hfToken) {
   }
 
   if (res.status === 401 || res.status === 403) {
-    throw new Error('Invalid Hugging Face token — check your token and try again.')
+    const err = new Error('Invalid Hugging Face token — check your token and try again.')
+    err.isAuthError = true
+    throw err
   }
 
   if (res.status === 503) {

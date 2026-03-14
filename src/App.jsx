@@ -18,6 +18,7 @@ function App() {
   const [loadingMsg, setLoadingMsg] = useState('')
   const [result, setResult] = useState(null)   // { has_dishwasher, method, evidence } | null
   const [error, setError] = useState(null)
+  const [warning, setWarning] = useState(null)
 
   function handleTokenChange(e) {
     const val = e.target.value
@@ -42,6 +43,7 @@ function App() {
     setLoading(true)
     setResult(null)
     setError(null)
+    setWarning(null)
 
     try {
       // Step 1: fetch the Zillow page via CORS proxy
@@ -63,13 +65,30 @@ function App() {
       }
 
       const toCheck = imageUrls.slice(0, MAX_IMAGES)
+      let visionUnavailable = false
       for (let i = 0; i < toCheck.length; i++) {
         setLoadingMsg(`Analyzing photo ${i + 1} of ${toCheck.length} with ${MODEL}…`)
-        const found = await checkImageForDishwasher(toCheck[i], hfToken.trim())
-        if (found) {
-          setResult({ has_dishwasher: true, method: 'vision', evidence: toCheck[i] })
-          return
+        try {
+          const found = await checkImageForDishwasher(toCheck[i], hfToken.trim())
+          if (found) {
+            setResult({ has_dishwasher: true, method: 'vision', evidence: toCheck[i] })
+            return
+          }
+        } catch (err) {
+          if (err.isAuthError) throw err  // always surface bad-token errors
+          // Network / model errors: fall back to text result after the loop
+          visionUnavailable = true
+          break
         }
+      }
+
+      if (visionUnavailable) {
+        setWarning(
+          'Photo analysis could not be completed (Hugging Face API unreachable). ' +
+          'Result is based on listing text only.',
+        )
+        setResult(textResult)
+        return
       }
 
       setResult({ has_dishwasher: false, method: 'vision', evidence: null })
@@ -198,6 +217,15 @@ function App() {
             <div>
               <strong>Could not check this listing.</strong>
               <p>{error}</p>
+            </div>
+          </div>
+        )}
+
+        {warning && !loading && (
+          <div className="result-card result-warning" role="note">
+            <span className="result-icon">⚠️</span>
+            <div>
+              <p>{warning}</p>
             </div>
           </div>
         )}
