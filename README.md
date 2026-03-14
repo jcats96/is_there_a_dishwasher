@@ -4,7 +4,9 @@ Paste a Zillow listing URL and instantly find out if the unit has a dishwasher.
 **Stage 1** searches the listing text. **Stage 2** uses a vision model to
 analyse listing photos when the text check draws a blank.
 
-Everything runs directly in your browser — there is no backend server.
+Zillow listing pages are rendered by a **headless Chromium browser**
+([Playwright](https://playwright.dev/)) so all dynamically-loaded content
+(text, amenities, photos) is fully available before extraction.
 
 ## Docs
 
@@ -16,16 +18,33 @@ Everything runs directly in your browser — there is no backend server.
 
 ---
 
-## Running locally
+## Running locally (development)
 
 ```bash
-npm install
-npm run dev
+npm install                      # install all dependencies (run once)
+npx playwright install chromium  # download Chromium for Playwright (run once)
+npm run dev                      # start the Vite dev server on http://localhost:5173
 ```
 
 Open **http://localhost:5173**, paste a Zillow URL, and click **Check**.
 
-That's it — no backend, no Docker, no Python required.
+The Vite dev server includes a built-in `/api/scrape` endpoint powered by
+Playwright — no separate server process is needed during development.
+
+---
+
+## Running in production
+
+```bash
+npm install
+npx playwright install chromium
+npm run build   # build the React frontend into dist/
+npm start       # start the Express + Playwright server on http://localhost:3000
+```
+
+The production server (`server/index.js`) serves the static frontend from
+`dist/` and exposes the same `/api/scrape` endpoint.  Set the `PORT`
+environment variable to use a different port.
 
 ---
 
@@ -58,12 +77,9 @@ Get a free token at **https://huggingface.co/settings/tokens**.
 
 ## How it works
 
-Everything runs client-side — no requests are sent to any server you control.
-
-1. **Fetch** — The Zillow listing page is fetched via the
-   [allorigins.win](https://allorigins.win/) CORS proxy. The HTML (including
-   Zillow's embedded `__NEXT_DATA__` JSON blob) is parsed in your browser to
-   extract all listing text and photo URLs.
+1. **Render** — A headless Chromium browser (Playwright) opens the Zillow
+   listing page and waits for all JavaScript to finish executing so that
+   dynamically-loaded text, amenities, and photo URLs are fully present.
 2. **Search text** — The extracted text is scanned for the word
    **"dishwasher"** (case-insensitive). If found, the result is returned
    immediately.

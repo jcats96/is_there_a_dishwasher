@@ -45,7 +45,7 @@ function App() {
 
     try {
       // Step 1: fetch the Zillow page via CORS proxy
-      setLoadingMsg('Fetching listing…')
+      setLoadingMsg('Rendering listing…')
       const { text, imageUrls } = await scrapeListing(url.trim())
 
       // Step 2: fast text check
@@ -234,9 +234,10 @@ function App() {
           <li>
             <span className="step-number">1</span>
             <div>
-              <strong>Fetch</strong> — The listing page is retrieved via a
-              CORS proxy and all text, amenity mentions, and photo URLs are
-              extracted directly in your browser.
+              <strong>Render</strong> — A headless Chromium browser (Playwright)
+              opens the listing page on the backend, waits for all JavaScript to
+              finish executing, and extracts listing text and photo URLs from the
+              fully-rendered page.
             </div>
           </li>
           <li>
